@@ -1,0 +1,120 @@
+name: Deploy GCP Infrastructure
+on:
+  workflow_call:
+    inputs:
+      aws_role_session_name:
+        description: AWS role session name
+        required: false
+        default: "gcp_terraform_deploy"
+        type: string
+      aws_region:
+        description: AWS region
+        required: true
+        type: string
+      aws_role_arn:
+        description: AWS IAM role ARN
+        required: true
+        type: string
+      gcp_workload_id_provider:
+        description: GCP Workload Identity Provider
+        required: true
+        type: string
+      terraform_base_dir:
+        description: Root directory containing environments/
+        required: false
+        type: string
+        default: "."
+      gcp_region:
+        description: GCP region
+        required: true
+        type: string
+      gcp_project:
+        description: GCP project
+        required: true
+        type: string
+      debug_token:
+        description: Set to true for token debugging
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  id-token: write
+  issues: write
+
+env:
+  AWS_REGION: ${{ inputs.AWS_REGION }}
+  TF_VAR_gcp_project: ${{ inputs.GCP_PROJECT }}
+  TF_VAR_gcp_region: ${{ inputs.GCP_REGION }}
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git clone the repository
+        uses: actions/checkout@v6
+      - name: Print OIDC claims
+        if: ${{ inputs.debug_token == true }}
+        run: |
+          TOKEN=$(curl -s -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r .value)
+          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub, aud, repository, ref, environment}'
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+          role-session-name: ${{ inputs.aws_role_session_name }}
+          aws-region: ${{ inputs.AWS_REGION }}
+          role-duration-seconds: 3600
+      - name: Configure GCP credentials
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ inputs.GCP_WORKLOAD_ID_PROVIDER }}
+          service_account: "${{ inputs.GCP_SERVICE_ACCOUNT }}"
+          token_format: "access_token"
+          access_token_lifetime: '3600s'
+      - name: Determine environment directory
+        run: |
+          if [[ "${{ github.ref_name }}" == *-rc* ]]; then
+            echo "DEPLOY_ENV=dev" >> $GITHUB_ENV
+            echo "Selected dev environment for RC tag."
+          else
+            echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
+            echo "Selected prod environment for release tag."
+          fi
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v4
+      - name: Terraform Init
+        working-directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
+        run: |
+          terraform init -backend-config=backend-config.hcl
+      - name: Terraform Plan
+        working-directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
+        run: |
+          terraform plan -out=tfplan
+          terraform show -no-color tfplan
+      - name: Manual Approval
+        uses: trstringer/manual-approval@v1
+        timeout-minutes: 15
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: d4n13l-4lf4
+          minimum-approvals: 1
+          polling-interval-seconds: 30
+          fail-on-denial: true
+          issue-title: "Approval required for deployment of ${{ github.ref_name }}"
+          issue-body: |
+            Terraform plan is ready for deployment.
+            
+            Version: ${{ github.ref_name }}
+            
+            Review the Terraform Plan output in this workflow run.
+            
+            Comment 'approve' to continue with Terraform apply.
+            Comment 'deny' to cancel the deployment.
+      - name: Terraform Apply
+        working-directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
+        run: |
+          terraform apply -auto-approve tfplan
