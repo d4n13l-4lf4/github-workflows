@@ -19,6 +19,10 @@ on:
         description: GCP Workload Identity Provider
         required: true
         type: string
+      gcp_service_account:
+        description: GCP Service Account
+        required: true
+        type: string
       terraform_base_dir:
         description: Root directory containing environments/
         required: false
@@ -44,9 +48,9 @@ permissions:
   issues: write
 
 env:
-  AWS_REGION: ${{ inputs.AWS_REGION }}
-  TF_VAR_gcp_project: ${{ inputs.GCP_PROJECT }}
-  TF_VAR_gcp_region: ${{ inputs.GCP_REGION }}
+  AWS_REGION: ${{ inputs.aws_region }}
+  TF_VAR_gcp_project: ${{ inputs.gcp_project }}
+  TF_VAR_gcp_region: ${{ inputs.gcp_region }}
 
 jobs:
   deploy:
@@ -64,15 +68,15 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.AWS_ROLE_ARN }}
+          role-to-assume: ${{ inputs.aws_role_arn }}
           role-session-name: ${{ inputs.aws_role_session_name }}
-          aws-region: ${{ inputs.AWS_REGION }}
+          aws-region: ${{ inputs.aws_region }}
           role-duration-seconds: 3600
       - name: Configure GCP credentials
         uses: google-github-actions/auth@v3
         with:
-          workload_identity_provider: ${{ inputs.GCP_WORKLOAD_ID_PROVIDER }}
-          service_account: "${{ inputs.GCP_SERVICE_ACCOUNT }}"
+          workload_identity_provider: ${{ inputs.gcp_workload_id_provider }}
+          service_account: "${{ inputs.gcp_service_account }}"
           token_format: "access_token"
           access_token_lifetime: '3600s'
       - name: Determine environment directory
