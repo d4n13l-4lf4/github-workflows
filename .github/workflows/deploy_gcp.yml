@@ -104,7 +104,13 @@ jobs:
         run: |
           terraform plan -out=tfplan
           terraform show -no-color tfplan
+      - name: Check Terraform changes
+        id: plan_check
+        uses: d4n13l-4lf4/github-workflows/.github/actions/terraform-plan-check@v0.0.4
+        with:
+          working_directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
       - name: Manual Approval
+        if: steps.plan_check.outputs.has_changes == 'true'
         uses: trstringer/manual-approval@v1
         timeout-minutes: 15
         with:
@@ -124,6 +130,7 @@ jobs:
             Comment 'approve' to continue with Terraform apply.
             Comment 'deny' to cancel the deployment.
       - name: Terraform Apply
+        if: steps.plan_check.outputs.has_changes == 'true'
         working-directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
         run: |
           terraform apply -auto-approve tfplan

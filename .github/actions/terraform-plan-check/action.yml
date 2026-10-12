@@ -1,0 +1,33 @@
+
+name: Terraform Plan Check
+description: Check whether a saved Terraform plan contains changes
+
+inputs:
+  working_directory:
+    description: Directory containing the saved tfplan
+    required: true
+
+outputs:
+  has_changes:
+    description: Whether the plan contains changes
+    value: ${{ steps.check.outputs.has_changes }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check plan changes
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working_directory }}
+      run: |
+        set -euo pipefail
+
+        has_changes=$(terraform show -json tfplan | jq -r '
+          [
+            .resource_changes[]?.change.actions[]?,
+            .output_changes[]?.actions[]?
+          ] | any(. != "no-op")
+        ')
+
+        echo "has_changes=$has_changes" >> "$GITHUB_OUTPUT"
+        echo "Terraform changes detected: $has_changes"
