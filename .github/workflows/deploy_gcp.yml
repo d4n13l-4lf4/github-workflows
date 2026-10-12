@@ -28,6 +28,16 @@ on:
         required: false
         type: string
         default: "."
+      terraform_vars:
+        description: JSON object containing Terraform variables
+        required: false
+        type: string
+        default: '{}'
+      debug_vars:
+        description: Set to true for debugging TF_VAR_* creation
+        type: boolean
+        required: false
+        default: false
       debug_token:
         description: Set to true for token debugging
         type: boolean
@@ -78,6 +88,11 @@ jobs:
             echo "DEPLOY_ENV=prod" >> $GITHUB_ENV
             echo "Selected prod environment for release tag."
           fi
+      - name: Export Terraform variables
+        uses: d4n13l-4lf4/github-workflows/.github/actions/terraform-json-vars@v0.0.2
+        with:
+          variables: ${{ inputs.terraform_vars }}
+          debug: ${{ inputs.debug_vars }}
       - name: Setup terraform
         uses: hashicorp/setup-terraform@v4
       - name: Terraform Init
