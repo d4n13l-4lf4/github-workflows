@@ -1,0 +1,89 @@
+
+name: Terraform JSON Variables
+description: Convert a JSON object into TF_VAR_* environment variables
+
+inputs:
+  variables:
+    description: JSON object containing Terraform input variables
+    required: true
+    default: "{}"
+  debug:
+    description: Print exported variable names and masked values
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Export Terraform variables
+      shell: bash
+      env:
+        TERRAFORM_VARS_JSON: ${{ inputs.variables }}
+        DEBUG_ENABLED: ${{ inputs.debug }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        import re
+        import uuid
+
+        def mask_value(value):
+            """Mask values without exposing short strings."""
+            text = str(value)
+            length = len(text)
+
+            # Never expose the content of short values.
+            if length <= 6:
+                return "**"
+
+            # Preserve a small prefix and suffix for longer values.
+            visible = max(1, min(2, length // 6))
+            masked_length = length - (2 * visible)
+
+            return (
+                text[:visible]
+                + ("*" * masked_length)
+                + text[-visible:]
+            )
+
+        raw = os.environ["TERRAFORM_VARS_JSON"]
+        debug = os.environ.get("DEBUG_ENABLED", "false").lower() == "true"
+
+        variables = json.loads(raw)
+
+        if not isinstance(variables, dict):
+            raise ValueError("Input must be a JSON object")
+
+        with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as f:
+            for name, value in variables.items():
+                if not isinstance(name, str) or not re.fullmatch(
+                    r"[A-Za-z_][A-Za-z0-9_]*", name
+                ):
+                    raise ValueError(f"Invalid Terraform variable name: {name!r}")
+
+                if value is None:
+                    raise ValueError(f"Null is not supported for {name}")
+
+                if isinstance(value, (dict, list)):
+                    encoded = json.dumps(value, separators=(",", ":"))
+                elif isinstance(value, bool):
+                    encoded = str(value).lower()
+                elif isinstance(value, (str, int, float)):
+                    encoded = str(value)
+                else:
+                    raise ValueError(f"Unsupported value type for {name}")
+
+                env_name = f"TF_VAR_{name}"
+                delimiter = "GHATF_" + uuid.uuid4().hex
+
+                if "\n" in encoded or "\r" in encoded:
+                    f.write(f"{env_name}<<{delimiter}\n")
+                    f.write(f"{encoded}\n{delimiter}\n")
+                else:
+                    f.write(f"{env_name}={encoded}\n")
+
+                if debug:
+                    print(f"{env_name}={mask_value(encoded)}")
+
+        print(f"Exported {len(variables)} Terraform variables.")
+        PY
