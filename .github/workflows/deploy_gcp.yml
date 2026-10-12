@@ -28,14 +28,6 @@ on:
         required: false
         type: string
         default: "."
-      gcp_region:
-        description: GCP region
-        required: true
-        type: string
-      gcp_project:
-        description: GCP project
-        required: true
-        type: string
       debug_token:
         description: Set to true for token debugging
         type: boolean
