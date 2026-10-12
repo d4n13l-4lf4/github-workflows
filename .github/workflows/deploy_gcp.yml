@@ -106,7 +106,7 @@ jobs:
           terraform show -no-color tfplan
       - name: Check Terraform changes
         id: plan_check
-        uses: d4n13l-4lf4/github-workflows/.github/actions/terraform-plan-check@v0.0.4
+        uses: d4n13l-4lf4/github-workflows/.github/actions/terraform-plan-check@v0.0.5
         with:
           working_directory: "${{ inputs.terraform_base_dir }}/environments/${{ env.DEPLOY_ENV }}"
       - name: Manual Approval
