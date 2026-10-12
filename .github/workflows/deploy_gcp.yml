@@ -49,8 +49,6 @@ permissions:
 
 env:
   AWS_REGION: ${{ inputs.aws_region }}
-  TF_VAR_gcp_project: ${{ inputs.gcp_project }}
-  TF_VAR_gcp_region: ${{ inputs.gcp_region }}
 
 jobs:
   deploy:
